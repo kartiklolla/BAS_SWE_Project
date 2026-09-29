@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/api/client.ts","./src/components/Layout.tsx","./src/pages/BookDetail.tsx","./src/pages/Demand.tsx","./src/pages/Inventory.tsx","./src/pages/Login.tsx","./src/pages/POS.tsx","./src/pages/Reorder.tsx","./src/pages/SalesStats.tsx","./src/pages/Search.tsx"],"version":"5.9.3"}
