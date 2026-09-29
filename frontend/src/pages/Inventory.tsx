@@ -40,31 +40,33 @@ export default function Inventory() {
   };
 
   return (
-    <div className="max-w-lg">
-      <h1 className="text-2xl font-bold mb-4">Inventory</h1>
+    <div className="max-w-lg mx-auto">
+      <h1 className="text-2xl font-bold text-slate-900 mb-4">Inventory</h1>
       <form onSubmit={lookup} className="flex gap-2 mb-4">
-        <input className="border rounded px-3 py-2 flex-1" placeholder="ISBN" value={isbn} onChange={(e) => setIsbn(e.target.value)} />
-        <button className="bg-blue-600 text-white rounded px-4 py-2">Find</button>
+        <input className="input flex-1" placeholder="ISBN" value={isbn} onChange={(e) => setIsbn(e.target.value)} />
+        <button className="btn-primary">Find</button>
       </form>
-      {msg && <p className="text-sm text-gray-700 mb-3">{msg}</p>}
+      {msg && <p className="text-sm text-slate-700 mb-3 bg-slate-100 rounded-lg p-2">{msg}</p>}
 
       {book && (
-        <div className="bg-white rounded border p-4 space-y-4">
-          <div>
-            <p className="font-medium">{book.title}</p>
-            <p className="text-sm text-gray-500">Stock {book.stock} · {rupees(book.priceInPaise)} · rack {book.rackNo ?? '—'} · requests {book.requestCount}</p>
+        <div className="card p-5 space-y-5">
+          <div className="border-b border-slate-100 pb-4">
+            <p className="font-semibold text-slate-900">{book.title}</p>
+            <p className="text-sm text-slate-500 mt-1">
+              Stock {book.stock} · {rupees(book.priceInPaise)} · rack {book.rackNo ?? '—'} · {book.requestCount} requests
+            </p>
           </div>
           <div className="flex gap-2 items-end">
-            <label className="text-sm">Receive qty
-              <input type="number" min={1} className="border rounded px-3 py-2 w-full" value={qty} onChange={(e) => setQty(e.target.value)} />
+            <label className="label flex-1">Receive qty
+              <input type="number" min={1} className="input w-full mt-1" value={qty} onChange={(e) => setQty(e.target.value)} />
             </label>
-            <button onClick={receive} className="bg-green-600 text-white rounded px-4 py-2">Receive</button>
+            <button onClick={receive} className="btn-success">Receive</button>
           </div>
           <div className="flex gap-2 items-end">
-            <label className="text-sm">New price (₹)
-              <input type="number" min={0.01} step={0.01} className="border rounded px-3 py-2 w-full" value={price} onChange={(e) => setPrice(e.target.value)} />
+            <label className="label flex-1">New price (₹)
+              <input type="number" min={0.01} step={0.01} className="input w-full mt-1" value={price} onChange={(e) => setPrice(e.target.value)} />
             </label>
-            <button onClick={updatePrice} className="bg-gray-800 text-white rounded px-4 py-2">Set price</button>
+            <button onClick={updatePrice} className="btn-dark">Set price</button>
           </div>
         </div>
       )}

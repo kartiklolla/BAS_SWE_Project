@@ -26,31 +26,33 @@ export default function SalesStats() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Sales statistics</h1>
-      <form onSubmit={run} className="flex flex-wrap gap-2 items-end mb-4">
-        <label className="text-sm">From<input type="date" className="border rounded px-3 py-2 block" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-        <label className="text-sm">To<input type="date" className="border rounded px-3 py-2 block" value={to} onChange={(e) => setTo(e.target.value)} /></label>
-        <button className="bg-blue-600 text-white rounded px-4 py-2">Run</button>
+      <h1 className="text-2xl font-bold text-slate-900 mb-4">Sales statistics</h1>
+      <form onSubmit={run} className="card p-3 flex flex-wrap gap-3 items-end mb-4">
+        <label className="label">From<input type="date" className="input block mt-1" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="label">To<input type="date" className="input block mt-1" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <button className="btn-primary">Run</button>
       </form>
       {err && <p className="text-red-600 text-sm mb-2">{err}</p>}
-      {isFetching && <p>Loading…</p>}
+      {isFetching && <p className="text-slate-500">Loading…</p>}
 
       {data && (
-        <table className="w-full bg-white rounded border text-sm">
-          <thead className="text-left border-b">
-            <tr><th className="p-2">Title</th><th className="p-2 text-right">Copies sold</th><th className="p-2 text-right">Revenue</th></tr>
-          </thead>
-          <tbody>
-            {data.length === 0 && <tr><td colSpan={3} className="p-3 text-gray-400">No sales in this period.</td></tr>}
-            {data.map((r) => (
-              <tr key={r.isbn} className="border-b">
-                <td className="p-2">{r.title}</td>
-                <td className="p-2 text-right">{r.copiesSold}</td>
-                <td className="p-2 text-right">{rupees(r.revenueInPaise)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr><th className="th">Title</th><th className="th text-right">Copies sold</th><th className="th text-right">Revenue</th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.length === 0 && <tr><td colSpan={3} className="td text-slate-400">No sales in this period.</td></tr>}
+              {data.map((r) => (
+                <tr key={r.isbn} className="hover:bg-slate-50">
+                  <td className="td font-medium text-slate-800">{r.title}</td>
+                  <td className="td text-right">{r.copiesSold}</td>
+                  <td className="td text-right font-semibold">{rupees(r.revenueInPaise)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

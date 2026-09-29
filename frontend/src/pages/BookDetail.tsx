@@ -19,17 +19,22 @@ export default function BookDetail() {
 
   const b = data!;
   return (
-    <div className="bg-white rounded border p-6 max-w-md">
-      <h1 className="text-2xl font-bold">{b.title}</h1>
-      <p className="text-gray-600 mb-4">{b.author}</p>
+    <div className="card p-6 max-w-md mx-auto">
+      <h1 className="text-2xl font-bold text-slate-900">{b.title}</h1>
+      <p className="text-slate-500 mb-4">{b.author}</p>
       {b.stock > 0 ? (
-        <dl className="space-y-1">
-          <div><dt className="inline font-medium">Available:</dt> {b.stock} copies</div>
-          <div><dt className="inline font-medium">Rack:</dt> {b.rackNo ?? '—'}</div>
-          <div><dt className="inline font-medium">Price:</dt> {rupees(b.priceInPaise)}</div>
-        </dl>
+        <>
+          <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 mb-4">
+            {b.stock} in stock
+          </span>
+          <dl className="grid grid-cols-2 gap-y-3 text-sm">
+            <dt className="label">Copies available</dt><dd className="text-right font-medium">{b.stock}</dd>
+            <dt className="label">Rack</dt><dd className="text-right font-medium">{b.rackNo ?? '—'}</dd>
+            <dt className="label">Price</dt><dd className="text-right font-semibold text-lg">{rupees(b.priceInPaise)}</dd>
+          </dl>
+        </>
       ) : (
-        <p className="text-gray-500">Not currently available. Your interest has been recorded.</p>
+        <p className="text-slate-500">Not currently available. Your interest has been recorded.</p>
       )}
     </div>
   );
@@ -58,15 +63,15 @@ function RequestForm() {
   if (state === 'done') return <p className="text-green-700">{msg}</p>;
 
   return (
-    <form onSubmit={submit} className="bg-white rounded border p-6 max-w-md space-y-3">
-      <h1 className="text-xl font-bold">Request this book</h1>
-      <p className="text-sm text-gray-500">We don't have it yet. Tell us what to order.</p>
+    <form onSubmit={submit} className="card p-6 max-w-md mx-auto space-y-3">
+      <h1 className="text-xl font-bold text-slate-900">Request this book</h1>
+      <p className="text-sm text-slate-500">We don't have it yet. Tell us what to order.</p>
       {(['title', 'author', 'publisher', 'edition'] as const).map((k) => (
-        <input key={k} className="border rounded px-3 py-2 w-full" placeholder={k[0].toUpperCase() + k.slice(1) + (k === 'edition' ? ' (optional)' : '')}
+        <input key={k} className="input w-full" placeholder={k[0].toUpperCase() + k.slice(1) + (k === 'edition' ? ' (optional)' : '')}
           value={f[k]} maxLength={200} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
       ))}
       {state === 'error' && <p className="text-red-600 text-sm">{msg}</p>}
-      <button disabled={state === 'saving'} className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50">
+      <button disabled={state === 'saving'} className="btn-primary">
         {state === 'saving' ? 'Submitting…' : 'Submit request'}
       </button>
     </form>

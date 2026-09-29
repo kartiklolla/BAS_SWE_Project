@@ -27,34 +27,53 @@ export default function Search() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Find a book</h1>
-      <form onSubmit={submit} className="flex flex-wrap gap-2 mb-6">
-        <input className="border rounded px-3 py-2" placeholder="Title" value={title} maxLength={200}
+      <div className="text-center mb-8">
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">Find your next book</h1>
+        <p className="text-slate-500 mt-2">Search the shop's catalogue by title or author.</p>
+      </div>
+
+      <form onSubmit={submit} className="card p-2 flex flex-col sm:flex-row gap-2 max-w-2xl mx-auto">
+        <input className="input flex-1" placeholder="Title" value={title} maxLength={200}
           onChange={(e) => setTitle(e.target.value)} />
-        <input className="border rounded px-3 py-2" placeholder="Author" value={author} maxLength={200}
+        <input className="input flex-1" placeholder="Author" value={author} maxLength={200}
           onChange={(e) => setAuthor(e.target.value)} />
-        <button className="bg-blue-600 text-white rounded px-4 py-2">Search</button>
+        <button className="btn-primary sm:w-auto">Search</button>
       </form>
 
-      {isFetching && <p>Searching…</p>}
-      {isError && <p className="text-red-600">Search failed. Try again.</p>}
-      {data && data.length === 0 && (
-        <p>No matches. <Link className="text-blue-600 underline" to="/books/none">Request a new title</Link></p>
-      )}
-      <ul className="divide-y bg-white rounded border">
-        {data?.map((b) => (
-          <li key={b.isbn} className="p-3 hover:bg-gray-50">
-            <Link to={`/books/${b.isbn}`} className="flex justify-between">
-              <span>
-                <span className="font-medium">{b.title}</span> <span className="text-gray-500">— {b.author}</span>
-              </span>
-              <span className={b.stock > 0 ? 'text-green-700' : 'text-gray-400'}>
-                {b.stock > 0 ? `${b.stock} in stock · ${rupees(b.priceInPaise)}` : 'not available'}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <div className="max-w-2xl mx-auto mt-6">
+        {isFetching && <p className="text-slate-500 text-center py-6">Searching…</p>}
+        {isError && <p className="text-red-600 text-center py-6">Search failed. Try again.</p>}
+        {data && data.length === 0 && (
+          <div className="card p-8 text-center text-slate-600">
+            <p className="mb-3">No matches found.</p>
+            <Link className="btn-primary" to="/books/none">Request a new title</Link>
+          </div>
+        )}
+        <ul className="space-y-2">
+          {data?.map((b) => (
+            <li key={b.isbn}>
+              <Link to={`/books/${b.isbn}`} className="card p-4 flex items-center justify-between gap-4 hover:border-indigo-300 hover:shadow transition">
+                <span className="min-w-0">
+                  <span className="font-semibold text-slate-900 block truncate">{b.title}</span>
+                  <span className="text-sm text-slate-500">{b.author}</span>
+                </span>
+                {b.stock > 0 ? (
+                  <span className="shrink-0 text-right">
+                    <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                      {b.stock} in stock
+                    </span>
+                    <span className="block mt-1 font-semibold text-slate-900">{rupees(b.priceInPaise)}</span>
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                    not available
+                  </span>
+                )}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

@@ -1,10 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+  body {
+    @apply bg-slate-100 text-slate-800 antialiased;
+  }
+}
+
+/* Reusable building blocks so every page shares one look. */
+@layer components {
+  .card {
+    @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+  }
+  .input {
+    @apply border border-slate-300 rounded-lg px-3 py-2 outline-none transition
+           focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100;
+  }
+  .label {
+    @apply text-sm font-medium text-slate-600;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
+           transition disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800;
+  }
+  .btn-success {
+    @apply btn bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800;
+  }
+  .btn-dark {
+    @apply btn bg-slate-800 text-white hover:bg-slate-900;
+  }
+  .btn-ghost {
+    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  }
+  .th {
+    @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .td {
+    @apply px-3 py-2.5;
+  }
+}
 
 /* Receipt / reorder print stylesheet: hide app chrome, show only the printable area. */
 @media print {
   .no-print {
     display: none !important;
+  }
+  body {
+    background: #fff;
   }
 }

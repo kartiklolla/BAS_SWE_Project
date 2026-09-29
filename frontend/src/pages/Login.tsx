@@ -28,15 +28,18 @@ export default function Login() {
   };
 
   return (
-    <form onSubmit={submit} className="bg-white rounded border p-6 max-w-sm mx-auto space-y-3">
-      <h1 className="text-xl font-bold">Staff sign-in</h1>
-      <input className="border rounded px-3 py-2 w-full" placeholder="Username" value={username} onChange={(e) => setU(e.target.value)} />
-      <input className="border rounded px-3 py-2 w-full" type="password" placeholder="Password" value={password} onChange={(e) => setP(e.target.value)} />
+    <form onSubmit={submit} className="card p-6 max-w-sm mx-auto space-y-4 mt-6">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">Staff sign-in</h1>
+        <p className="text-sm text-slate-500">Access POS, inventory, and reports.</p>
+      </div>
+      <input className="input w-full" placeholder="Username" value={username} onChange={(e) => setU(e.target.value)} />
+      <input className="input w-full" type="password" placeholder="Password" value={password} onChange={(e) => setP(e.target.value)} />
       {err && <p className="text-red-600 text-sm">{err}</p>}
-      <button disabled={busy} className="bg-blue-600 text-white rounded px-4 py-2 w-full disabled:opacity-50">
+      <button disabled={busy} className="btn-primary w-full">
         {busy ? 'Signing in…' : 'Sign in'}
       </button>
-      <p className="text-xs text-gray-400">Seeded: clerk / employee / owner — password &lt;name&gt;123</p>
+      <p className="text-xs text-slate-400">Seeded: clerk / employee / owner — password &lt;name&gt;123</p>
     </form>
   );
 }
