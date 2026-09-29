@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Receipt / reorder print stylesheet: hide app chrome, show only the printable area. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

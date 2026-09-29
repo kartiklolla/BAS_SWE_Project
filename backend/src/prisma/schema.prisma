@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Publisher {
+  id      Int    @id @default(autoincrement())
+  name    String
+  address String
+  books   Book[]
+}
+
+model Book {
+  isbn         String       @id
+  title        String
+  author       String
+  publisherId  Int
+  publisher    Publisher    @relation(fields: [publisherId], references: [id])
+  priceInPaise Int
+  rackNo       Int?
+  leadTimeDays Int          @default(0)
+  stock        Int          @default(0)
+  requestCount Int          @default(0)
+  stocked      Boolean      @default(false)
+  sales        SaleRecord[]
+
+  @@index([title])
+  @@index([author])
+}
+
+model SaleRecord {
+  id               Int      @id @default(autoincrement())
+  isbn             String
+  book             Book     @relation(fields: [isbn], references: [isbn])
+  soldOn           DateTime @default(now())
+  unitPriceInPaise Int
+  receiptNo        Int
+  receipt          Receipt  @relation(fields: [receiptNo], references: [receiptNo])
+}
+
+// Persisted so a receipt is retrievable by receiptNo (orphaned-response case)
+// and so a retried commit with the same idempotencyKey returns the same receipt.
+model Receipt {
+  receiptNo      Int          @id @default(autoincrement())
+  issuedOn       DateTime     @default(now())
+  totalInPaise   Int
+  idempotencyKey String?      @unique
+  lines          SaleRecord[]
+}
+
+model User {
+  id           Int    @id @default(autoincrement())
+  username     String @unique
+  passwordHash String
+  role         Role
+}
+
+enum Role {
+  CLERK
+  EMPLOYEE
+  OWNER
+}
