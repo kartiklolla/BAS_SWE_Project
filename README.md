@@ -2,12 +2,14 @@
 
 A single-shop management system for a bookstore. It covers four functions end to end:
 
-1. **Customer availability enquiry** — search the catalogue, see stock/rack/price, or request a title the shop doesn't carry.
-2. **Point of sale (POS)** — a clerk scans ISBNs, builds a cart, and commits an atomic sale that prints a receipt.
-3. **Inventory receiving** — an employee books in new stock and updates prices.
-4. **Owner reporting** — demand report, sales statistics over a date range, and a daily reorder list with publisher addresses.
+1. **Customer availability enquiry** — search the catalogue, see stock/rack/price, ask for an out-of-stock title, or request one the shop doesn't carry.
+2. **Point of sale (POS)** — a clerk scans ISBNs, builds a cart, and commits an atomic sale that prints a receipt (and can reprint any past receipt).
+3. **Inventory** — an employee receives deliveries, maintains price / rack / lead time, and brings customer-requested titles onto the shelves.
+4. **Owner reporting** — demand report, sales statistics, and a daily reorder list grouped by publisher. Every report links straight to the action that resolves it.
 
-The full product specification lives in [CLAUDE.md](CLAUDE.md). This README explains how the built system implements that spec: its architecture, data flow, API, business rules, and the pages/diagrams behind them.
+It ships with a **built-in catalogue** of 40 real books (with cover art), customer requests, and a month of sales history, so every screen is meaningful from the first launch. It runs locally with Docker, and **deploys to Vercel** as one project (static frontend + serverless API).
+
+The full product specification lives in [CLAUDE.md](CLAUDE.md). This README explains how the built system implements that spec: its architecture, data flow, API, business rules, design, and the pages/diagrams behind them.
 
 ---
 
@@ -21,9 +23,13 @@ The full product specification lives in [CLAUDE.md](CLAUDE.md). This README expl
 - [Data model](#data-model)
 - [Business rules](#business-rules)
 - [API reference](#api-reference)
+- [Built-in catalogue](#built-in-catalogue)
 - [Frontend pages](#frontend-pages)
+- [How the diagrams map to the UI](#how-the-diagrams-map-to-the-ui)
+- [Design & accessibility](#design--accessibility)
 - [Diagrams](#diagrams)
 - [Running locally](#running-locally)
+- [Deploying to Vercel](#deploying-to-vercel)
 - [Testing](#testing)
 - [Deliberate scope & simplifications](#deliberate-scope--simplifications)
 
@@ -37,10 +43,10 @@ Every rule from the spec (R.1–R.9) is traceable to code via `// R.n` comments 
 |---|---|---|
 | R.1 | Enquire about availability | `GET /api/books` — [`routes/books.ts`](backend/src/routes/books.ts) |
 | R.2 | Register a procurement request for an uncatalogued title | `POST /api/books/requests` — [`routes/books.ts`](backend/src/routes/books.ts) |
-| R.3 | Increment request count when a searched title is out of stock | `GET /api/books` side effect — [`routes/books.ts`](backend/src/routes/books.ts) |
-| R.4 | Maintain book price | `PATCH /api/books/:isbn/price` — [`routes/books.ts`](backend/src/routes/books.ts) |
+| R.3 | Increment request count when a searched title is out of stock | `GET /api/books?title=…` side effect, and `POST /api/books/:isbn/interest` — [`routes/books.ts`](backend/src/routes/books.ts) |
+| R.4 | Maintain book price | `PATCH /api/books/:isbn/price`, `PATCH /api/books/:isbn` — [`routes/books.ts`](backend/src/routes/books.ts) |
 | R.5 | Record a sale | `POST /api/sales` — [`services/sales.ts`](backend/src/services/sales.ts) |
-| R.6 | Update inventory on supply received | `POST /api/books/:isbn/receive` — [`routes/books.ts`](backend/src/routes/books.ts) |
+| R.6 | Update inventory on supply received | `POST /api/books/:isbn/receive`, `PATCH /api/books/:isbn` (rack, lead time) — [`routes/books.ts`](backend/src/routes/books.ts) |
 | R.7 | View demand report | `GET /api/reports/demand` — [`routes/reports.ts`](backend/src/routes/reports.ts) |
 | R.8 | Generate sales statistics | `GET /api/reports/sales` — [`services/reports.ts`](backend/src/services/reports.ts) |
 | R.9 | Print daily reorder list | `GET /api/reports/reorder` — [`services/reports.ts`](backend/src/services/reports.ts) |
@@ -51,9 +57,9 @@ Every rule from the spec (R.1–R.9) is traceable to code via `// R.n` comments 
 
 **Backend** — Node.js + Express + TypeScript, PostgreSQL via Prisma ORM. JWT auth for staff (bcrypt password hashing). Tested with Vitest.
 
-**Frontend** — React + TypeScript + Vite, React Router for routing, TanStack Query for server state, TailwindCSS for styling.
+**Frontend** — React + TypeScript + Vite, React Router for routing, TanStack Query for server state, TailwindCSS for styling. Fonts from Google Fonts; cover art from the Open Library Covers API. No UI component library.
 
-**Infra** — Docker Compose runs local Postgres. No hosting is set up; everything runs on localhost.
+**Infra** — Docker Compose runs Postgres locally. In production, [Vercel](https://vercel.com) serves the built frontend as static files and runs the Express app as a serverless function, backed by a hosted Postgres (Neon, Prisma Postgres, Supabase…).
 
 Two conventions run through the whole system:
 
@@ -66,16 +72,19 @@ Two conventions run through the whole system:
 
 ```
 lib_sys/
+├── api/
+│   └── index.js                  # Vercel serverless entry: exports the Express app
 ├── backend/
 │   └── src/
-│       ├── index.ts              # entrypoint, starts the HTTP server
+│       ├── index.ts              # local entrypoint, starts the HTTP server
 │       ├── app.ts                # Express app: middleware + route mounting + error handler
 │       ├── db.ts                 # shared PrismaClient instance
+│       ├── lib/isbn.ts           # ISBN pattern + deterministic key for requested titles
 │       ├── middleware/
 │       │   └── auth.ts           # signToken, requireAuth (JWT), requireRole (guard)
 │       ├── routes/
 │       │   ├── auth.ts           # POST /auth/login
-│       │   ├── books.ts          # enquiry, requests, price, receive  (R.1–R.4, R.6)
+│       │   ├── books.ts          # enquiry, requests, interest, details, price, receive (R.1–R.4, R.6)
 │       │   ├── sales.ts          # POST /sales, GET /sales/:receiptNo  (R.5)
 │       │   └── reports.ts        # demand / sales / reorder            (R.7–R.9)
 │       ├── services/
@@ -83,18 +92,29 @@ lib_sys/
 │       │   └── reports.ts        # sales-stats + reorder computations
 │       ├── prisma/
 │       │   ├── schema.prisma     # data model
-│       │   ├── seed.ts           # demo publishers, books, users
+│       │   ├── seed.ts           # built-in catalogue (idempotent, runs on every deploy)
 │       │   └── migrations/       # SQL migrations
 │       └── tests/
-│           └── rules.test.ts     # money-path rule tests
+│           ├── rules.test.ts     # money-path rules: oversell, idempotency, reorder
+│           └── api.test.ts       # HTTP: demand counting, requested-title lifecycle
 ├── frontend/
+│   ├── index.html                # fonts, favicon, meta
+│   ├── tailwind.config.js        # palette + font tokens (with contrast notes)
 │   └── src/
 │       ├── main.tsx              # router + route guards + query client
-│       ├── index.css             # Tailwind + shared component classes
+│       ├── index.css             # paper texture, focus ring, shared component classes
 │       ├── api/client.ts         # fetch wrapper, JWT storage, shared types
-│       ├── components/Layout.tsx # header/nav shell
-│       └── pages/                # Search, BookDetail, Login, POS, Inventory,
-│                                 #   Demand, SalesStats, Reorder
+│       ├── components/
+│       │   ├── Layout.tsx        # header/nav, skip link, footer, error boundary
+│       │   ├── HeroBooks.tsx     # hand-built SVG book-stack illustration
+│       │   ├── Cover.tsx         # real cover art with illustrated fallback
+│       │   ├── BookCard.tsx      # shelf card
+│       │   ├── Status.tsx        # lifecycle badge (Requested / on shelf / out) + sparkle
+│       │   └── ErrorBoundary.tsx # keeps one broken page from blanking the app
+│       └── pages/                # Search, BookDetail (+ request form), Login, POS,
+│                                 #   Inventory, Demand, SalesStats, Reorder, NotFound
+├── vercel.json                   # Vercel build, function and rewrite config
+├── package.json                  # root: marks api/ as ESM for Vercel
 ├── docker-compose.yml            # local Postgres
 ├── CLAUDE.md                     # full product spec
 └── README.md
@@ -110,7 +130,8 @@ lib_sys/
 Browser (React SPA)
    │  fetch('/api/...')  with  Authorization: Bearer <jwt>  for staff routes
    ▼
-Vite dev server  ──proxy /api──▶  Express (port 4000)
+Local:   Vite dev server ──proxy /api──▶ Express (port 4000)
+Vercel:  static frontend/dist ──rewrite /api/*──▶ api/index.js ──▶ same Express app
                                     │
                     ┌───────────────┼────────────────┐
                     ▼               ▼                ▼
@@ -133,7 +154,9 @@ Vite dev server  ──proxy /api──▶  Express (port 4000)
 5. The service runs the whole sale inside a single Prisma transaction, so either every accepted line updates stock **and** the sales log, or nothing does.
 6. The response bubbles back up; TanStack Query caches read results and the page re-renders.
 
-**Auth model:** JWTs are signed with `JWT_SECRET`, expire in 8 hours, and carry `{ userId, role }`. Customers are unauthenticated — search, book detail, and requests need no token. The token lives in `localStorage`; on any `401` the client clears it and the user is bounced to `/login`.
+**Auth model:** JWTs are signed with `JWT_SECRET`, expire in 8 hours, and carry `{ userId, role }`. Customers are unauthenticated — search, book detail, and requests need no token. The token lives in `localStorage`; on a `401` from a staff call the client clears it and the user signs in again.
+
+**Production secret guard:** locally, a public dev secret is used when `JWT_SECRET` is unset. With `NODE_ENV=production` the server **refuses to start** unless `JWT_SECRET` is set to something other than that dev value — otherwise anyone could forge an Owner token. The check compares the value, not just its presence, because Prisma Client copies `backend/.env` into `process.env` when it is imported, so a copied dev `.env` would otherwise slip the public secret into production.
 
 **Error handling:** all handlers can be `async`; `express-async-errors` forwards any rejected promise to the central error middleware in [`app.ts`](backend/src/app.ts), which returns a `500` instead of crashing the process. Expected failures (validation, not-found, wrong role) are returned explicitly with the correct status code.
 
@@ -145,7 +168,7 @@ Vite dev server  ──proxy /api──▶  Express (port 4000)
 |---|---|---|
 | **Customer** | No | Search, view a book, register a procurement request |
 | **Sales Clerk** | Yes | Everything a customer can, plus record sales |
-| **Employee** | Yes | Receive supply, update price |
+| **Employee** | Yes | Receive supply; maintain price, rack and lead time; stock requested titles |
 | **Owner** | Yes | Inherits Employee, plus all reports and the reorder list |
 
 **Owner inherits Employee** in both tiers:
@@ -160,7 +183,7 @@ The frontend guard is a UX convenience only; the backend is the real authority �
 
 Defined in [`schema.prisma`](backend/src/prisma/schema.prisma).
 
-- **Publisher** `1 ──▶ 0..*` **Book** — a publisher publishes many books; the reorder list reads the publisher address.
+- **Publisher** `1 ──▶ 0..*` **Book** — a publisher publishes many books; the reorder list reads the publisher address. `name` is unique, so a request naming an existing publisher reuses it (race-safe upsert).
 - **Book** — the catalogue entry, keyed by `isbn`. Holds `stock`, `priceInPaise`, `rackNo`, `leadTimeDays`, `requestCount`, and `stocked`.
 - **SaleRecord** — one line item of one sale; stores `unitPriceInPaise` **frozen at the time of sale** and links to a `Receipt`.
 - **Receipt** — one committed sale. Persisted so a receipt is retrievable by `receiptNo` (reprint-safe) and so a retried commit with the same `idempotencyKey` returns the same receipt instead of double-charging.
@@ -202,6 +225,12 @@ These match the spec (section 11) exactly and are covered by tests.
 - **A sale is atomic:** if it commits, every accepted line updates stock and the sales log together, or none do (single Prisma transaction).
 - **Price changes apply to future sales only.** `SaleRecord.unitPriceInPaise` is captured at sale time and never rewritten, so a mid-transaction price change can't affect an in-flight sale.
 
+Rules added to make the requested-title lifecycle safe (state diagram, `Requested → InStock`):
+
+- **Demand is counted for enquiries, not browsing.** `GET /books` only increments `requestCount` when a `title`/`author` term matches a `stock = 0` title. Listing the catalogue with no term never counts, and the frontend never refetches a search behind the user's back.
+- **A title can't be stocked until it has a price.** `receive` returns `400` while `priceInPaise ≤ 0`; a requested stub starts at `0`, so it could otherwise be sold for free.
+- **A requested title's ISBN can be replaced exactly once — before the first stock arrives.** Stubs are keyed by a placeholder (see [Deriving the ISBN](#deriving-the-isbn-for-a-request-r2)); the employee enters the real ISBN from the delivered copy. After the first receive, receipts reference the key, so it is frozen (`409`).
+
 ---
 
 ## API reference
@@ -211,22 +240,24 @@ Base path `/api`. JSON throughout. Staff endpoints require `Authorization: Beare
 | Method | Path | Auth | Body | Success | Notes |
 |---|---|---|---|---|---|
 | POST | `/auth/login` | None | `{username, password}` | `200 {token, role}` | `401` on bad credentials |
-| GET | `/books?title=&author=` | None | – | `200 [Book]` | **R.1.** Matching a `stock=0` title increments its `requestCount` server-side (**R.3**) — a documented side effect of this GET |
+| GET | `/books?title=&author=` | None | – | `200 [Book]` | **R.1.** Terms are OR-ed (one search box matches title or author); results include `publisher {name, address}`. With a term, matching a `stock=0` title increments its `requestCount` server-side (**R.3**) — a documented side effect of this GET. With no term it is a plain catalogue listing and counts nothing |
 | GET | `/books/:isbn` | None | – | `200 Book` / `404` | |
-| POST | `/books/requests` | None | `{title, author, publisher, edition?}` | `201 {isbn, requestCount:1}` | **R.2.** Creates a stub with `stock=0, stocked=false`. `409` if it already resolves to an existing title |
+| POST | `/books/requests` | None | `{title, author, publisher, edition?}` | `201 {isbn, requestCount:1}` | **R.2.** Creates a stub with `stock=0, stocked=false, priceInPaise=0`. `409 {isbn}` if the details resolve to an existing title |
+| POST | `/books/:isbn/interest` | None | – | `200 {isbn, requestCount}` / `404` / `409` | **R.3.** “I want this book” from Book Detail. Increments only while `stock = 0`; `409` if the title is in stock. *Beyond spec* |
 | PATCH | `/books/:isbn/price` | Employee | `{priceInPaise}` | `200 Book` / `404` | **R.4.** Rejects `priceInPaise <= 0` with `400` |
-| POST | `/books/:isbn/receive` | Employee | `{qty}` | `200 Book` / `404` / `400` | **R.6.** Rejects `qty <= 0` with `400`. Clears `requestCount`, sets `stocked=true` |
+| PATCH | `/books/:isbn` | Employee | any of `{priceInPaise, rackNo, leadTimeDays, isbn, publisherAddress}` | `200 Book` / `400` / `404` / `409` | **R.4 / R.6.** Maintain price, rack (`null` clears) and lead time (0–365). `isbn` and `publisherAddress` let a requested stub take its real ISBN and its publisher's address; changing `isbn` after the first stock returns `409`. *Beyond spec* |
+| POST | `/books/:isbn/receive` | Employee | `{qty}` | `200 Book` / `404` / `400` | **R.6.** Rejects `qty <= 0`, and titles with no price yet, with `400`. Atomic increment; clears `requestCount`, sets `stocked=true` |
 | POST | `/sales` | Clerk | `{items:[isbn,...]}` | `201 Receipt` | **R.5.** Atomic. Optional `Idempotency-Key` header |
-| GET | `/sales/:receiptNo` | Clerk | – | `200 Receipt` / `404` | Reprint-safe retrieval |
+| GET | `/sales/:receiptNo` | Clerk | – | `200 Receipt` / `404` | Reprint-safe retrieval (used by POS “Reprint a receipt”) |
 | GET | `/reports/demand` | Owner | – | `200 [Book]` | **R.7.** `requestCount > 0`, sorted descending |
-| GET | `/reports/sales?from=&to=` | Owner | – | `200 [SalesStatRow]` | **R.8.** `400` if `from > to` |
-| GET | `/reports/reorder` | Owner | – | `200 [ReorderItem]` | **R.9.** Computed against the **server's** current date |
+| GET | `/reports/sales?from=&to=` | Owner | – | `200 [SalesStatRow]` | **R.8.** Sorted by copies sold. `400` if `from > to` or a date isn't `YYYY-MM-DD`. With **neither** date, reports the last 14 days computed from the **server's** clock |
+| GET | `/reports/reorder` | Owner | – | `200 [ReorderItem]` | **R.9.** Computed against the **server's** current date. Ordered by publisher, then title; each item includes `leadTimeDays` |
 
-**Standard status codes:** `400` validation · `401` missing/invalid/expired token · `403` wrong role · `404` unknown ISBN · `409` duplicate request · `500` unhandled.
+**Standard status codes:** `400` validation · `401` missing/invalid/expired token · `403` wrong role · `404` unknown ISBN · `409` duplicate request / ISBN conflict · `500` unhandled.
 
 ### Deriving the ISBN for a request (R.2)
 
-The shop has no ISBN for a book it doesn't carry yet, so `POST /books/requests` derives a deterministic 13-digit key by hashing `title | author | edition`. Because the same details always hash to the same key, a duplicate request hits the unique-key constraint and returns **`409`** instead of silently creating a second stub. (See `isbnFromDetails` in [`routes/books.ts`](backend/src/routes/books.ts).)
+The shop has no ISBN for a book it doesn't carry yet, so `POST /books/requests` derives a deterministic 13-digit key by hashing `title | author | edition` (trimmed, whitespace-collapsed, lower-cased, so `" the  hobbit"` and `"The Hobbit"` match). Because the same details always hash to the same key, a duplicate request hits the unique-key constraint and returns **`409`** instead of silently creating a second stub. The request form then calls `/interest` with the returned `isbn`, so the second reader is still counted. When copies arrive, the employee replaces the placeholder with the real ISBN via `PATCH /books/:isbn`. (See `isbnFromDetails` in [`lib/isbn.ts`](backend/src/lib/isbn.ts).)
 
 ### POST /sales — example
 
@@ -256,30 +287,93 @@ If an item is not catalogued or out of stock it appears in `rejected` with a `re
 
 ---
 
+## Built-in catalogue
+
+[`seed.ts`](backend/src/prisma/seed.ts) gives every fresh database a working shop:
+
+| What | Details |
+|---|---|
+| **40 books** | Real titles with real ISBN-13s (so cover art resolves) across computing, fantasy & children's, classics, science fiction, Indian writing (including the Devanagari title गोदान, to exercise non-Latin search) and non-fiction. Each has a price, rack, lead time and stock level; a few are out of stock with open requests. |
+| **12 publishers** | With addresses, which the reorder list prints. |
+| **3 customer requests** | Uncatalogued stubs (*Project Hail Mary*, *The Night Circus*, *Tomb of Sand*) keyed exactly as the request form keys them, so a matching request from the UI is recognised as a duplicate. |
+| **~30 days of sales** | 29 receipts generated by a fixed-seed PRNG, so every fresh database gets the same history. Several bestsellers fall below their reorder level, so Demand, Sales and Reorder all have real data on day one. |
+| **3 staff accounts** | `clerk`, `employee`, `owner` — see [passwords](#running-locally) (and the [production rule](#deploying-to-vercel)). |
+
+The seed is **idempotent** — it runs on every Vercel deploy:
+
+- Publishers, books and users are upserted with `update: {}`, so re-running never overwrites live edits (prices, stock, passwords).
+- Demo sales history is only written into a database that has **no sales yet**, so it never mixes into real trading.
+
+---
+
 ## Frontend pages
 
 | Page | Route | Access | Purpose |
 |---|---|---|---|
-| **Search** | `/` | Public | Search by title/author; results show stock badge + price |
-| **Book Detail** | `/books/:isbn` | Public | Availability/rack/price; or a "request this book" form when uncatalogued (`404`) |
-| **Login** | `/login` | Public | Staff sign-in; redirects by role |
-| **POS** | `/pos` | Clerk | Scan ISBNs, running cart total, commit, printable receipt |
-| **Inventory** | `/inventory` | Employee | Receive stock, update price |
-| **Demand Report** | `/reports/demand` | Owner | Request counts, descending |
-| **Sales Statistics** | `/reports/sales` | Owner | Date range → per-title copies sold + revenue |
-| **Reorder List** | `/reports/reorder` | Owner | Today's below-threshold titles with publisher address, printable |
+| **Home / Search** | `/` | Public | Storybook hero with one search box (title or author), then the shelves: every stocked title as a cover card with availability and price. `?q=` holds the search, so Back/Forward and links work |
+| **Book Detail** | `/books/:isbn` | Public | Cover, price, copies, rack, publisher. Out of stock → “I want this book”. Uncatalogued (`404`) → request form |
+| **Request a book** | `/request` | Public | The R.2 form on its own page (prefilled from a failed search) |
+| **Login** | `/login` | Public | Staff sign-in; lands each role on its own page |
+| **Point of sale** | `/pos` | Clerk | Scan/type ISBNs, remove lines, running total, complete sale, printable receipt, **reprint by receipt number** |
+| **Inventory** | `/inventory` | Employee | The whole catalogue with status, search and filters (*needs attention*, *requested*, *out of stock*…). **Manage** opens a panel to receive a delivery and edit price, rack and lead time; requested titles also take their real ISBN and publisher address. `?isbn=` deep-links to a row |
+| **Demand** | `/reports/demand` | Owner | Most-wanted titles first, each with a **Stock this title / Receive stock** button into Inventory |
+| **Sales** | `/reports/sales` | Owner | Opens on the server's last 14 days; pick any range; per-title copies + revenue with a totals row |
+| **Reorder list** | `/reports/reorder` | Owner | Today's below-threshold titles **grouped by publisher** with address — prints as one order per publisher. Each row links to **Receive** |
+| **Not found** | `*` | Public | “Lost in the stacks” |
 
 **Notable frontend behaviours (from the spec's edge-case list):**
 
-- **POS scans fetch fresh** — each scan re-fetches the book so a stale cached stock never lets a sold-out title into the cart.
-- **Cart survives auth expiry** — if the JWT expires mid-transaction, the cart stays in state and the clerk is told to re-authenticate and retry (the idempotency key makes the retry safe).
-- **Malformed ISBN guarded** — the POS input rejects anything that isn't 10–13 digits before hitting the server.
-- **Double-submit guard** — the request form disables its button while submitting, so a double click can't create two stubs.
-- **`from > to` guarded client-side** on Sales Statistics (and again server-side, which is authoritative).
-- **Empty search** does nothing rather than fetching everything.
-- **Print stylesheet** — `@media print` hides the app chrome so only the receipt / reorder list prints.
+- **POS scans fetch fresh** — each scan re-fetches the book so a stale cached stock never lets a sold-out title into the cart; it also counts copies already in the cart.
+- **Cart survives auth expiry and failed commits** — the cart stays, and retrying reuses the same idempotency key, so nothing can be sold twice. **New sale** issues a fresh key.
+- **Malformed ISBN guarded** — POS accepts only ISBN-13 or ISBN-10 (may end in `X`) before calling the server.
+- **Double-submit guard** — the request form ignores clicks while sending, so a double click can't create two stubs (the server's `409` backs this up).
+- **`from > to` guarded client-side** on Sales (and again server-side, which is authoritative). “Today” is never sent from the client.
+- **No hidden demand inflation** — queries don't refetch on window focus, and search results are cached per term.
+- **Network failures** surface as a readable message with a *Try again* button, not a blank screen; an error boundary keeps the header usable if a page ever crashes.
+- **Print stylesheet** — `@media print` removes navigation, texture and shadows so only the receipt / reorder list prints.
 
-Styling is a shared component layer in [`index.css`](frontend/src/index.css) (`.card`, `.input`, `.btn-*`, `.th`, `.td`), so every page shares one look from a single source.
+---
+
+## How the diagrams map to the UI
+
+Each process in the Level-1 DFD and each branch of the sequence/state diagrams has a screen and a button behind it:
+
+| Diagram element | Where it happens |
+|---|---|
+| **P1 Handle Enquiry** — *match, stock > 0* | Search → book card → Book Detail shows copies, rack, price |
+| **P1** — *match, stock = 0* → `incrementRequest()` | Searching counts it automatically; Book Detail adds **I want this book** |
+| **P1** — *no match* → `registerNewTitle()` | Empty search → **Request this book** → stub created with `stock = 0` (state: **Requested**) |
+| **P2 Record Sale** — scan loop, reject, commit, receipt | POS: scan adds lines or shows the reject reason; **Complete sale** commits atomically; receipt prints; **Reprint** retrieves it later |
+| **P3 Update Inventory** — qty / price, clear `requestCount` | Inventory → **Manage** → *Receive a delivery* and *Book details* |
+| **State: Requested → InStock** (`receiveSupply`) | Demand → **Stock this title** → enter real ISBN, price, address → **Add to stock** |
+| **State: InStock → OutOfStock → InStock** | Selling the last copy makes the badge *Out of stock*; receiving restores it |
+| **State: Adequate ⇄ BelowThreshold** (`dailyCheck`) | The Reorder list *is* the daily check; **Receive** on a row moves it back to adequate |
+| **P4 Generate Reports** | Demand, Sales and Reorder pages (Owner) |
+
+Verified end to end in the browser: a customer asked for *Project Hail Mary* (requests 5 → 6), the owner stocked it from Demand with its real ISBN, the clerk sold a copy, and the next reorder list flagged it.
+
+---
+
+## Design & accessibility
+
+**Look and feel** — a storybook bookshop, kept restrained:
+
+- **Paper:** cream background (`#FBF7EA`) with a faint SVG-noise grain, drawn in CSS with no image files.
+- **Type:** **Fraunces** (soft storybook serif, using its `SOFT` axis) for headings; **Caveat** (hand-lettered) for small eyebrow lines; **Nunito** (rounded, very legible) for body text.
+- **Palette:** taken from the reference illustration — sky blue, teal, coral, mustard, tangerine, navy — defined once as Tailwind tokens in [`tailwind.config.js`](frontend/tailwind.config.js).
+- **Illustration:** the hero book stack ([`HeroBooks.tsx`](frontend/src/components/HeroBooks.tsx)) is hand-built SVG — patterned spines, a ribbon, a pen, a potted plant, twinkling sparkles.
+- **Covers:** real art from the [Open Library Covers API](https://openlibrary.org/dev/docs/api/covers). When a book has none (or the API's per-IP rate limit is hit), [`Cover.tsx`](frontend/src/components/Cover.tsx) draws an illustrated cover in the palette instead. The real image stays invisible until it has loaded, so there's never a broken-image icon.
+- **Components:** one shared layer in [`index.css`](frontend/src/index.css): `.card`, `.input`, `.btn-primary / -outline / -soft / -fern`, `.badge-*`, `.notice-*`, `.table-wrap`, `.th`, `.td`.
+
+**Accessibility** — checked with [axe-core](https://github.com/dequelabs/axe-core) (WCAG 2.2 AA + best practices) on every route, as both customer and staff: home, search results, book detail (in stock / out of stock / not found), request, login, inventory with an open panel, demand, sales, reorder, 404, and POS (empty cart, cart with a warning, receipt). **0 violations**. Specifically:
+
+- **Contrast:** every text/background pair is ≥ 5:1 (measured ratios are noted beside the palette tokens).
+- **Keyboard:** a **Skip to content** link comes first; a strong 3 px focus ring appears on every interactive element; tab order follows reading order.
+- **Labels & names:** every input has a visible `<label>` (the hero search has a screen-reader label plus a `role="search"` landmark). Repeated buttons carry the book title in screen-reader text (*“Manage Matilda”*).
+- **Announcements:** search result counts, POS scan feedback and form outcomes use `aria-live` regions; errors use `role="alert"`; the active nav item has `aria-current`.
+- **Tables:** captions and `scope` on headers. Wide tables scroll inside their card, and no page scrolls sideways at 375 px.
+- **Motion:** the sparkle twinkle and gentle float stop entirely under `prefers-reduced-motion`.
+- **Decoration:** illustrations and cover art are hidden from assistive tech, because the title is always present as text.
 
 ---
 
@@ -570,7 +664,7 @@ flowchart TD
 
 ## Running locally
 
-Prerequisites: Node.js, Docker (for Postgres). No hosting required — everything runs on localhost.
+Prerequisites: Node.js 20+, Docker (for Postgres).
 
 ```bash
 # 1. Start Postgres
@@ -580,8 +674,8 @@ docker compose up -d db
 cd backend
 cp .env.example .env
 npm install
-npx prisma migrate dev      # apply migrations
-npm run seed                # demo data (see logins below)
+npx prisma migrate deploy   # apply migrations
+npm run seed                # built-in catalogue + staff accounts
 npm run dev
 
 # 3. Frontend ->  http://localhost:5173  (proxies /api to the backend)
@@ -592,7 +686,9 @@ npm run dev
 
 Open http://localhost:5173.
 
-**Seeded staff logins** (password is `<username>123`):
+> **Upgrading an existing local database?** Running `npm run seed` adds the catalogue on top of what is there, but skips the demo sales history if your database already has any sales. For the full fresh-install experience, reset the dev database (this **erases all local data**): `cd backend && npx prisma migrate reset`.
+
+**Local staff logins** (password is `<username>123`; the login page shows this hint in dev builds only):
 
 | Username | Password | Role |
 |---|---|---|
@@ -600,15 +696,73 @@ Open http://localhost:5173.
 | `employee` | `employee123` | Employee — Inventory |
 | `owner` | `owner123` | Owner — Reports + inventory |
 
-The seed also loads three books (including one out-of-stock and one non-Latin title) and two publishers. See [`seed.ts`](backend/src/prisma/seed.ts).
-
 **Environment variables** (`backend/.env`, template in `.env.example`):
 
-| Var | Purpose |
-|---|---|
-| `DATABASE_URL` | Postgres connection string |
-| `JWT_SECRET` | Signing secret for staff JWTs |
-| `PORT` | Backend port (default 4000) |
+| Var | Local | Production |
+|---|---|---|
+| `DATABASE_URL` | docker Postgres | Pooled connection string from your Postgres provider |
+| `DIRECT_URL` | same as `DATABASE_URL` | **Direct (non-pooled)** connection string — used only by migrations |
+| `JWT_SECRET` | leave unset (public dev secret is used) | **Required.** A long random value; the server won't start without it |
+| `SEED_STAFF_PASSWORD` | unset (`<name>123` is used) | Password for the `clerk` / `employee` / `owner` accounts. If unset on Vercel, **no** staff accounts are created |
+| `PORT` | 4000 | not used on Vercel |
+
+---
+
+## Deploying to Vercel
+
+The repo deploys as **one Vercel project**: the built frontend is served as static files, and every `/api/*` request is rewritten to a serverless function ([`api/index.js`](api/index.js)) that runs the same Express app as local dev. It's all configured in [`vercel.json`](vercel.json):
+
+| Setting | Value | Why |
+|---|---|---|
+| `installCommand` | `npm ci` in `backend/` and `frontend/` | Two separate packages, clean installs from their lockfiles |
+| `buildCommand` | `backend: build:vercel`, then `frontend: build` | See below |
+| `outputDirectory` | `frontend/dist` | The static site |
+| `functions` | `api/index.js` + Prisma engine files | Makes sure the Linux query engine ships with the function |
+| `rewrites` | `/api/*` → function, everything else → `index.html` | API routing + client-side routes (`/inventory`, `/books/…`) survive a refresh |
+
+On every deploy, `npm run build:vercel` (in `backend/`) runs:
+
+1. `prisma generate` — builds the client, including the `rhel-openssl-3.0.x` engine Vercel's runtime needs.
+2. `prisma migrate deploy` — applies any pending migrations (via `DIRECT_URL`).
+3. `tsc` — compiles the backend to `backend/dist`, which the function imports.
+4. `node dist/prisma/seed.js` — the idempotent seed, so a brand-new deployment arrives **with the catalogue already on the shelves**.
+
+### Steps
+
+1. **Push the repo to GitHub** (or GitLab/Bitbucket).
+2. **Create a Postgres database.** In the Vercel dashboard: *Storage → Create → Neon* (or Prisma Postgres, Supabase, any Postgres). Connect it to the project.
+3. **Import the project** in Vercel (*Add New → Project*), keeping the **root directory as the repo root**. `vercel.json` supplies the build settings; leave the framework preset as *Other*.
+4. **Set environment variables** (*Settings → Environment Variables*):
+   - `DATABASE_URL` — the **pooled** connection string. The Neon integration sets this for you.
+   - `DIRECT_URL` — the **direct / unpooled** string (Neon names it `DATABASE_URL_UNPOOLED`; copy its value).
+   - `JWT_SECRET` — a long random value, e.g. from `openssl rand -base64 48`.
+   - `SEED_STAFF_PASSWORD` — the password for the three staff accounts.
+5. **Deploy.** The build log ends with something like `Seeded 12 publishers, 40 books, 3 requests, 29 demo receipts, 3 staff accounts.`
+
+From the CLI instead:
+
+```bash
+npm i -g vercel
+```
+
+```bash
+vercel link
+```
+
+```bash
+vercel env add JWT_SECRET
+```
+
+```bash
+vercel --prod
+```
+
+### Production notes
+
+- **Staff passwords are set once.** The seed never overwrites an existing account, so changing `SEED_STAFF_PASSWORD` later has no effect on existing users. Change a password by deleting that `User` row and redeploying, or by updating its `passwordHash` (bcrypt).
+- **Preview deployments share the database** unless you give the Preview environment its own `DATABASE_URL`/`DIRECT_URL`, because migrations and the seed run on every build.
+- **Demo sales history** is written only into an empty database. On a database that has seen real trading, it's skipped.
+- **Verified locally:** clean `npm ci` of both packages; `build:vercel` against an empty database (migrates + seeds), again on the same database (no-op), and with no staff password (catalogue only, no accounts); the function served in production mode; dev passwords and tokens forged with the public dev secret both rejected (`401`); and the server refusing to start without a private `JWT_SECRET`. The deploy itself hasn't been run against Vercel's infrastructure.
 
 ---
 
@@ -618,12 +772,21 @@ The seed also loads three books (including one out-of-stock and one non-Latin ti
 cd backend && npm test
 ```
 
-The suite in [`tests/rules.test.ts`](backend/src/tests/rules.test.ts) covers the money-path rules that matter most:
+6 tests against the local database. Each test creates and removes its own rows, so the suite can run repeatedly without leftovers.
+
+[`tests/rules.test.ts`](backend/src/tests/rules.test.ts) — the money-path rules:
 
 - **No overselling** — three sale attempts against a single copy accept exactly one, reject two, and leave stock at `0` (never negative).
 - **Idempotency** — the same `Idempotency-Key` returns the same receipt and decrements stock only once.
 - **Reorder computation** — a below-threshold title is flagged with `toProcure = inventoryLevel − stock`.
 - **Lead-time zero** — a title with `leadTimeDays = 0` is never flagged, regardless of stock or sales.
+
+[`tests/api.test.ts`](backend/src/tests/api.test.ts) — over HTTP with Supertest:
+
+- **Demand counting** — browsing the catalogue never increments `requestCount`; a search matching a zero-stock title does.
+- **Requested-title lifecycle** — a request creates a stub. A differently-spaced/cased duplicate gets `409`. Receiving is refused until there's a price. `PATCH` sets the real ISBN, price, rack, lead time and publisher address. Receiving stocks it and clears demand. After that the ISBN is frozen (`409`).
+
+Frontend checks were done in a real browser rather than as automated suites: the full customer → owner → clerk flow, axe-core on every route, keyboard navigation, and 375 px layouts.
 
 ---
 
@@ -631,9 +794,9 @@ The suite in [`tests/rules.test.ts`](backend/src/tests/rules.test.ts) covers the
 
 Kept intentionally minimal; add these when they earn their place:
 
-- **Frontend test suites** (Playwright e2e, React Testing Library) are not included — the one backend suite covers the risky logic. Add UI tests as the interface grows.
-- **Rack / lead-time edit UI** — the documented API exposes only `price` and `receive`, so the Inventory page matches that contract. Add endpoints + fields if the shop needs to edit rack/lead-time through the UI.
-- **Pagination on search** — the dataset is tiny; add it when result counts hurt.
-- **Dark mode / component library** — not worth it for an internal tool.
-
-> ⚠️ The Login page prints the seeded credentials for demo convenience. Remove that line before any real deployment.
+- **Frontend test suites** (Playwright e2e, React Testing Library) are not included — the backend suites cover the risky logic and the UI was verified in a browser. Add UI tests as the interface grows.
+- **Adding a brand-new title directly** — the diagrams only create titles through customer requests (R.2), so staff stock new books the same way. Add a “New title” form to Inventory if the shop needs it.
+- **Rate limiting** on the public endpoints (`/books/requests`, `/interest`, search) — anyone can inflate demand counts. Add a per-IP limiter (e.g. Vercel Firewall rules) before relying on demand numbers for purchasing.
+- **Pagination** — 40-odd titles render instantly; add it when the catalogue reaches the hundreds.
+- **Cover art is fetched from Open Library**, which rate-limits per IP; past the limit the illustrated covers appear instead. Store cover IDs in the database if you need every real cover every time.
+- **Dark mode / component library** — not worth it for a single shop.
