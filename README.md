@@ -12,6 +12,9 @@ It ships with a **built-in catalogue** of 40 real books (with cover art), custom
 The full product specification lives in [CLAUDE.md](CLAUDE.md). This README explains how the built system implements that spec: its architecture, data flow, API, business rules, design, and the pages/diagrams behind them.
 
 ---
+## Deployed at [BAS](https://bassweproject-boniikpmi-kartiklolla1-7004s-projects.vercel.app/)
+
+---
 
 ## Table of contents
 
