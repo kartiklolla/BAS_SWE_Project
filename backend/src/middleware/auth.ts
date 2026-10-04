@@ -2,7 +2,16 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Role } from '@prisma/client';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+// The dev fallback is public (it's in the repo), so a deployed instance using it would let
+// anyone forge an Owner token. In production, refuse to start unless a real secret is set.
+// The value itself is checked, not just its presence: Prisma Client copies backend/.env into
+// process.env on import, so a copied dev .env could otherwise smuggle the public secret in.
+const DEV_SECRET = 'dev-secret-change-me';
+const isProd = process.env.NODE_ENV === 'production';
+const JWT_SECRET = process.env.JWT_SECRET || (isProd ? '' : DEV_SECRET);
+if (isProd && (!JWT_SECRET || JWT_SECRET === DEV_SECRET)) {
+  throw new Error('JWT_SECRET must be set to a private value in production');
+}
 
 export interface AuthedRequest extends Request {
   user?: { userId: number; role: Role };

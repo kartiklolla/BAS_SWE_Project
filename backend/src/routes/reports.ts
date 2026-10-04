@@ -16,11 +16,21 @@ reportsRouter.get('/demand', async (_req, res) => {
   res.json(books);
 });
 
+const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+const day = (d: Date) => d.toISOString().slice(0, 10);
+
 // GET /api/reports/sales?from=&to=  R.8. 400 if from > to.
+// With neither date it reports the last 14 days, computed from the server's clock so a
+// skewed client clock can't shift the window (spec section 16).
 reportsRouter.get('/sales', async (req, res) => {
-  const from = String(req.query.from ?? '');
-  const to = String(req.query.to ?? '');
-  if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+  let from = typeof req.query.from === 'string' ? req.query.from : '';
+  let to = typeof req.query.to === 'string' ? req.query.to : '';
+  if (!from && !to) {
+    const now = new Date();
+    to = day(now);
+    from = day(new Date(now.getTime() - 13 * 24 * 60 * 60 * 1000));
+  }
+  if (!isDay(from) || !isDay(to)) return res.status(400).json({ error: 'from and to must be dates (YYYY-MM-DD)' });
   if (from > to) return res.status(400).json({ error: 'from must not be after to' });
   res.json(await salesStats(from, to));
 });

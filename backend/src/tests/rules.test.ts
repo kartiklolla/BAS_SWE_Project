@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../db.js';
 import { recordSale } from '../services/sales.js';
 import { reorderList } from '../services/reports.js';
@@ -15,8 +16,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Collect receipt numbers before deleting their lines, or the receipts are orphaned.
+  const lines = await prisma.saleRecord.findMany({ where: { isbn: ISBN }, select: { receiptNo: true } });
   await prisma.saleRecord.deleteMany({ where: { isbn: ISBN } });
-  await prisma.receipt.deleteMany({ where: { lines: { some: { isbn: ISBN } } } });
+  await prisma.receipt.deleteMany({ where: { receiptNo: { in: lines.map((l) => l.receiptNo) } } });
   await prisma.book.delete({ where: { isbn: ISBN } });
   await prisma.publisher.delete({ where: { id: pubId } });
   await prisma.$disconnect();
@@ -35,8 +38,9 @@ describe('sales', () => {
   it('is idempotent: same key returns the same receipt without re-decrementing', async () => {
     // restock so there is something to (not) sell
     await prisma.book.update({ where: { isbn: ISBN }, data: { stock: 5 } });
-    const a = await recordSale([ISBN], 'key-123');
-    const b = await recordSale([ISBN], 'key-123');
+    const key = `test-${randomUUID()}`; // fresh per run: keys persist on receipts
+    const a = await recordSale([ISBN], key);
+    const b = await recordSale([ISBN], key);
     expect(b.receiptNo).toBe(a.receiptNo);
     const book = await prisma.book.findUniqueOrThrow({ where: { isbn: ISBN } });
     expect(book.stock).toBe(4); // decremented once, not twice

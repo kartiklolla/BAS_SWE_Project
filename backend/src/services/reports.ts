@@ -12,6 +12,7 @@ export interface ReorderItem {
   title: string;
   stock: number;
   copiesSoldLast14: number;
+  leadTimeDays: number;
   inventoryLevel: number;
   toProcure: number;
   publisher: string;
@@ -34,12 +35,14 @@ export async function salesStats(fromISO: string, toISO: string): Promise<SalesS
   const books = await prisma.book.findMany({ where: { isbn: { in: grouped.map((g) => g.isbn) } } });
   const titleOf = new Map(books.map((b) => [b.isbn, b.title]));
 
-  return grouped.map((g) => ({
-    isbn: g.isbn,
-    title: titleOf.get(g.isbn) ?? g.isbn,
-    copiesSold: g._count._all,
-    revenueInPaise: g._sum.unitPriceInPaise ?? 0,
-  }));
+  return grouped
+    .map((g) => ({
+      isbn: g.isbn,
+      title: titleOf.get(g.isbn) ?? g.isbn,
+      copiesSold: g._count._all,
+      revenueInPaise: g._sum.unitPriceInPaise ?? 0,
+    }))
+    .sort((a, b) => b.copiesSold - a.copiesSold || b.revenueInPaise - a.revenueInPaise);
 }
 
 // R.9. Reorder list computed against the server's current date.
@@ -49,7 +52,11 @@ export async function salesStats(fromISO: string, toISO: string): Promise<SalesS
 export async function reorderList(now = new Date()): Promise<ReorderItem[]> {
   const since = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-  const books = await prisma.book.findMany({ include: { publisher: true } });
+  // Ordered by publisher so the printed list reads as one purchase order per publisher.
+  const books = await prisma.book.findMany({
+    include: { publisher: true },
+    orderBy: [{ publisher: { name: 'asc' } }, { title: 'asc' }],
+  });
   const sold = await prisma.saleRecord.groupBy({
     by: ['isbn'],
     where: { soldOn: { gte: since, lte: now } },
@@ -67,6 +74,7 @@ export async function reorderList(now = new Date()): Promise<ReorderItem[]> {
         title: b.title,
         stock: b.stock,
         copiesSoldLast14: copies,
+        leadTimeDays: b.leadTimeDays,
         inventoryLevel,
         toProcure: inventoryLevel - b.stock,
         publisher: b.publisher.name,

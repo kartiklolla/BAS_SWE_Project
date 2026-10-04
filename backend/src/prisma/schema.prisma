@@ -1,15 +1,20 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // rhel-openssl-3.0.x is the Vercel serverless runtime; native covers local dev.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations need a direct (non-pooled) connection on serverless Postgres.
+  // Locally both URLs point at the same docker database.
+  directUrl = env("DIRECT_URL")
 }
 
 model Publisher {
   id      Int    @id @default(autoincrement())
-  name    String
+  name    String @unique
   address String
   books   Book[]
 }
