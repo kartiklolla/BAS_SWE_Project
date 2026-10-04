@@ -1,34 +1,60 @@
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api, type Book } from '../api/client';
+import { api, errorText, type Book } from '../api/client';
+import { Cover } from '../components/Cover';
+import { Sparkle, Status } from '../components/Status';
 
+// R.7: titles customers asked for (requestCount > 0), most wanted first.
+// Each row leads to the action that resolves it: stocking the title in Inventory.
 export default function Demand() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['demand'],
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ['reports', 'demand'],
     queryFn: () => api<Book[]>('/reports/demand', { auth: true }),
   });
 
-  if (isLoading) return <p>Loading…</p>;
-  if (isError) return <p className="text-red-600">Could not load report.</p>;
-
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-900 mb-4">Demand report</h1>
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr><th className="th">Title</th><th className="th">Author</th><th className="th text-right">Requests</th></tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {data?.length === 0 && <tr><td colSpan={3} className="td text-slate-400">No requests recorded.</td></tr>}
-            {data?.map((b) => (
-              <tr key={b.isbn} className="hover:bg-slate-50">
-                <td className="td font-medium text-slate-800">{b.title}</td><td className="td text-slate-500">{b.author}</td>
-                <td className="td text-right font-semibold">{b.requestCount}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="pt-4">
+      <p className="eyebrow">What readers are asking for</p>
+      <h1 className="page-title">Demand</h1>
+      <p className="lede">
+        Every search that finds an out-of-stock title, every “I want this book”, and every new request lands here.
+        Receiving stock for a title clears its count.
+      </p>
+
+      {isPending && <p className="py-10 text-center text-ink-muted">Loading…</p>}
+      {isError && <p className="notice-err mt-6" role="alert">{errorText(error)}</p>}
+
+      {data?.length === 0 && (
+        <div className="card mt-8 p-10 text-center">
+          <Sparkle className="mx-auto h-8 w-8 text-lagoon-400" />
+          <p className="mt-3 text-lg font-bold">No open requests. Every wish has been granted.</p>
+        </div>
+      )}
+
+      {data && data.length > 0 && (
+        <ol className="mt-8 space-y-3">
+          {data.map((b, i) => (
+            <li key={b.isbn} className="card flex flex-wrap items-center gap-4 p-4">
+              <span className="w-8 text-center font-display text-2xl font-semibold text-ink-muted" aria-hidden="true">{i + 1}</span>
+              <Cover book={b} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="text-lg font-bold leading-snug">{b.title}</p>
+                <p className="text-sm text-ink-muted">{b.author}{b.publisher && ` · ${b.publisher.name}`}</p>
+                <div className="mt-1.5">
+                  {b.stocked ? <Status book={b} /> : <span className="badge-req">New title — not catalogued yet</span>}
+                </div>
+              </div>
+              <p className="text-center">
+                <span className="block font-display text-3xl font-semibold">{b.requestCount}</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">{b.requestCount === 1 ? 'request' : 'requests'}</span>
+              </p>
+              <Link to={`/inventory?isbn=${b.isbn}`} className="btn-primary btn-sm">
+                {b.stocked ? 'Receive stock' : 'Stock this title'}<span className="sr-only">: {b.title}</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

@@ -1,59 +1,152 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   html {
-    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    @apply font-sans text-ink;
+    -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-slate-100 text-slate-800 antialiased;
+    @apply bg-cream-100 text-ink antialiased;
+    /* Paper grain: a tiny tiled SVG noise, tinted ink, very low alpha. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .13 0 0 0 0 .11 0 0 0 0 .09 .14 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display text-ink;
+    font-variation-settings: 'SOFT' 100;
+  }
+  /* One strong, consistent keyboard focus ring (5.6:1 against cream). */
+  :focus-visible {
+    outline: 3px solid #1f6a87;
+    outline-offset: 3px;
+    border-radius: 10px;
+  }
+  ::selection {
+    background: #fdf0cc;
   }
 }
 
-/* Reusable building blocks so every page shares one look. */
 @layer components {
   .card {
-    @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+    @apply rounded-3xl border border-cream-300 bg-cream-50 shadow-soft;
   }
-  .input {
-    @apply border border-slate-300 rounded-lg px-3 py-2 outline-none transition
-           focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100;
+  .page-title {
+    @apply font-display text-4xl font-semibold tracking-tight sm:text-5xl;
+  }
+  .eyebrow {
+    @apply font-hand text-2xl font-bold text-fern-800;
+  }
+  .lede {
+    @apply mt-2 max-w-2xl text-lg text-ink-muted;
   }
   .label {
-    @apply text-sm font-medium text-slate-600;
+    @apply mb-1.5 block text-sm font-extrabold text-ink-soft;
+  }
+  .hint {
+    @apply mt-1 text-sm text-ink-muted;
+  }
+  .input {
+    @apply w-full rounded-2xl border-2 border-ink/20 bg-cream-50 px-4 py-2.5 text-base text-ink transition
+           placeholder:text-ink-muted/80 hover:border-ink/40 focus:border-ink focus:outline-none;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
-           transition disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full px-5 py-2.5 text-[15px] font-extrabold
+           transition disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800;
+    @apply btn bg-ink text-cream-50 hover:bg-navy;
   }
-  .btn-success {
-    @apply btn bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800;
+  .btn-outline {
+    @apply btn border-2 border-ink bg-transparent text-ink hover:bg-ink hover:text-cream-50;
   }
-  .btn-dark {
-    @apply btn bg-slate-800 text-white hover:bg-slate-900;
+  .btn-soft {
+    @apply btn bg-cream-200 text-ink hover:bg-cream-300;
   }
-  .btn-ghost {
-    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  .btn-fern {
+    @apply btn bg-fern-800 text-white hover:bg-fern-700;
+  }
+  .btn-sm {
+    @apply min-h-[36px] px-4 py-1.5 text-sm;
+  }
+  .link {
+    @apply font-bold text-lagoon-700 underline decoration-2 underline-offset-4 hover:text-ink;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-extrabold;
+  }
+  .badge-in {
+    @apply badge bg-fern-100 text-fern-800;
+  }
+  .badge-out {
+    @apply badge bg-coral-100 text-coral-800;
+  }
+  .badge-req {
+    @apply badge bg-mustard-100 text-mustard-800;
+  }
+  .notice {
+    @apply rounded-2xl border-2 px-4 py-3 text-[15px] font-semibold;
+  }
+  .notice-ok {
+    @apply notice border-fern-500/30 bg-fern-100 text-fern-800;
+  }
+  .notice-warn {
+    @apply notice border-mustard-400/50 bg-mustard-100 text-mustard-800;
+  }
+  .notice-err {
+    @apply notice border-coral-400/40 bg-coral-100 text-coral-800;
+  }
+  .table-wrap {
+    /* relative: makes this the containing block for absolutely positioned descendants
+       (e.g. sr-only labels), so the scroller clips them instead of widening the page. */
+    @apply card relative overflow-x-auto;
   }
   .th {
-    @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+    @apply whitespace-nowrap px-4 py-3 text-left text-xs font-extrabold uppercase tracking-wider text-ink-muted;
   }
   .td {
-    @apply px-3 py-2.5;
+    @apply px-4 py-3 align-middle;
   }
 }
 
-/* Receipt / reorder print stylesheet: hide app chrome, show only the printable area. */
+/* Gentle storybook motion, all of it opt-out via the OS reduced-motion setting. */
+@keyframes twinkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.twinkle {
+  animation: twinkle 3.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.bob {
+  animation: bob 7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Receipt / reorder list printing: drop chrome, texture and shadows. */
 @media print {
   .no-print {
     display: none !important;
   }
   body {
     background: #fff;
+  }
+  .card,
+  .table-wrap {
+    box-shadow: none;
+    border-color: #ccc;
   }
 }

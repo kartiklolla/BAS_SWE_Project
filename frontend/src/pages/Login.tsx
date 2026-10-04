@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, setAuth, type Role } from '../api/client';
+import { api, ApiError, errorText, setAuth, type Role } from '../api/client';
+import { LogoMark } from '../components/Layout';
+
+const HOME: Record<Role, string> = { CLERK: '/pos', EMPLOYEE: '/inventory', OWNER: '/reports/demand' };
 
 export default function Login() {
   const [username, setU] = useState('');
@@ -19,27 +22,39 @@ export default function Login() {
         body: JSON.stringify({ username, password }),
       });
       setAuth(token, role);
-      nav(role === 'CLERK' ? '/pos' : role === 'OWNER' ? '/reports/reorder' : '/inventory');
-    } catch {
-      setErr('Invalid username or password.');
+      nav(HOME[role]);
+    } catch (e) {
+      setErr(e instanceof ApiError && e.status === 401 ? 'That username and password don’t match.' : errorText(e));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <form onSubmit={submit} className="card p-6 max-w-sm mx-auto space-y-4 mt-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Staff sign-in</h1>
-        <p className="text-sm text-slate-500">Access POS, inventory, and reports.</p>
+    <form onSubmit={submit} className="card mx-auto mt-8 max-w-md space-y-5 p-8">
+      <div className="text-center">
+        <div className="mx-auto w-fit"><LogoMark /></div>
+        <h1 className="mt-3 text-3xl font-semibold">Staff sign in</h1>
+        <p className="mt-1 text-ink-muted">For the counter, the stockroom and the owner's desk.</p>
       </div>
-      <input className="input w-full" placeholder="Username" value={username} onChange={(e) => setU(e.target.value)} />
-      <input className="input w-full" type="password" placeholder="Password" value={password} onChange={(e) => setP(e.target.value)} />
-      {err && <p className="text-red-600 text-sm">{err}</p>}
-      <button disabled={busy} className="btn-primary w-full">
+      <div>
+        <label htmlFor="username" className="label">Username</label>
+        <input id="username" className="input" autoComplete="username" required value={username} onChange={(e) => setU(e.target.value)} />
+      </div>
+      <div>
+        <label htmlFor="password" className="label">Password</label>
+        <input id="password" className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setP(e.target.value)} />
+      </div>
+      {err && <p className="notice-err" role="alert">{err}</p>}
+      <button type="submit" disabled={busy} className="btn-primary w-full">
         {busy ? 'Signing in…' : 'Sign in'}
       </button>
-      <p className="text-xs text-slate-400">Seeded: clerk / employee / owner — password &lt;name&gt;123</p>
+      {/* Demo accounts only exist with these passwords in local development. */}
+      {import.meta.env.DEV && (
+        <p className="text-center text-sm text-ink-muted">
+          Dev accounts: <b>clerk</b> · <b>employee</b> · <b>owner</b>, password <code>&lt;name&gt;123</code>
+        </p>
+      )}
     </form>
   );
 }
